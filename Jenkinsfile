@@ -1,6 +1,9 @@
 pipeline {
 	agent {
-
+		docker {
+			image "artifactory.ap.manulife.com/docker/ubuntu-ci-image:1.11.0"
+			args '-u devops:docker --privileged -v /app/maven/.m2:/home/devops/.m2 -v /var/run/docker.sock:/'
+		}
 	}
 
 	options {
@@ -8,11 +11,28 @@ pipeline {
 	}
 
 	environment {
-
+		POWERBI_MARKET = 'KH-D2C'
+		TARGET_ENV = ''
 	}
 
 	parameters {
+		string(name: 'PowerBI_Apps',    defaultValue: '', description: 'Application Apps')
+		string(name: 'PowerBI_Env',     defaultValue: '', description: 'Power BI Environment')
+		string(name: 'Group_ID_Env',    defaultValue: '', description: 'Workspace Group ID')
 
+		// ODBC connection replacement inside the RDL file only
+		string(name: 'Find_String',     defaultValue: '', description: 'ODBC connection text to find in RDL')
+		string(name: 'Replace_String',  defaultValue: '', description: 'ODBC connection text to replace in RDL')
+
+		string(name: 'PowerBI_Repo_URL', defaultValue: '', description: 'Git repository URL')
+		string(name: 'Git_Branch',       defaultValue: '', description: 'Git branch or tag')
+		string(name: 'Mail_Builder',     defaultValue: '', description: 'Notification email recipient')
+
+		booleanParam(
+			name:         'ALLOW_REPLACE_EXISTING_RDL',
+			defaultValue: false,
+			description:  'If true, existing ODBC-based RDL reports will be re-imported with Overwrite (report ID may change)'
+		)
 	}
 
 	stages {
@@ -529,9 +549,8 @@ Write-Host 'All RDL files processed successfully.'
 """
 					)
 				}
+				echo '-------- Power BI paginated reports deployment end --------'
 			}
-
-			echo '-------- Power BI paginated reports deployment end --------'
 		}
 
 	}

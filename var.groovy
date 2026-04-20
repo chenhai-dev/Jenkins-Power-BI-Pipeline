@@ -1,6 +1,9 @@
 pipeline {
     agent {
-
+        docker {
+            image "ubuntu-ci-image:1.11.0"
+            args '-u devops:docker --privileged -v /app/maven/.m2:/home/devops/.m2 -v /var/run/docker.sock:/var/run/docker.sock'
+        }
     }
 
     options {
@@ -8,11 +11,28 @@ pipeline {
     }
 
     environment {
-
+        POWERBI_MARKET = 'KH-D2C'
+        TARGET_ENV     = ''
     }
 
     parameters {
+        string(name: 'PowerBI_Apps',     defaultValue: '',                                    description: 'Application Apps')
+        string(name: 'PowerBI_Env',      defaultValue: '',                       description: 'Power BI Environment')
+        string(name: 'Group_ID_Env',     defaultValue: '',   description: 'Workspace Group ID')
 
+        // ODBC connection replacement inside the RDL file only
+        string(name: 'Find_String',      defaultValue: '',                             description: 'ODBC connection text to find')
+        string(name: 'Replace_String',   defaultValue: '',                       description: 'ODBC connection text to replace')
+
+        string(name: 'PowerBI_Repo_URL', defaultValue: '', description: 'Git repo URL')
+        string(name: 'Git_Branch',       defaultValue: '',                            description: 'Git branch or tag')
+        string(name: 'Mail_Builder',     defaultValue: '',               description: 'Notification recipient')
+
+        booleanParam(
+                name: 'ALLOW_REPLACE_EXISTING_RDL',
+                defaultValue: false,
+                description: 'If true, existing ODBC-based RDL reports will be re-imported with Overwrite (report ID may change).'
+        )
     }
 
     stages {
@@ -39,16 +59,16 @@ pipeline {
                     def targetDir  = "${env.POWERBI_MARKET}-${params.PowerBI_Apps}/${params.PowerBI_Env}"
 
                     checkout([
-                        $class: 'GitSCM',
-                        branches: [[name: branchSpec]],
-                        userRemoteConfigs: [[
-                            url: params.PowerBI_Repo_URL,
-                            credentialsId: 'DevSecOps_SCM_SSH_CLONE_PRIVATE_KEY'
-                        ]],
-                        extensions: [
-                            [$class: 'CleanBeforeCheckout'],
-                            [$class: 'RelativeTargetDirectory', relativeTargetDir: targetDir]
-                        ]
+                            $class: 'GitSCM',
+                            branches: [[name: branchSpec]],
+                            userRemoteConfigs: [[
+                                                        url: params.PowerBI_Repo_URL,
+                                                        credentialsId: 'DevSecOps_SCM_SSH_CLONE_PRIVATE_KEY'
+                                                ]],
+                            extensions: [
+                                    [$class: 'CleanBeforeCheckout'],
+                                    [$class: 'RelativeTargetDirectory', relativeTargetDir: targetDir]
+                            ]
                     ])
                 }
             }
@@ -57,19 +77,19 @@ pipeline {
         stage('Deploy Power BI RDL') {
             steps {
                 withCredentials([
-                    usernamePassword(
-                        credentialsId: 'AZ_SPN_KH_PAS_NONPROD',
-                        usernameVariable: 'PBI_APP_ID',
-                        passwordVariable: 'PBI_APP_SECRET'
-                    ),
-                    string(
-                        credentialsId: 'AZ_SPN_KH_PAS_NONPROD_TENANT_ID',
-                        variable: 'PBI_TENANT_ID'
-                    )
+                        usernamePassword(
+                                credentialsId: 'AZ_SPN_KH_PAS_NONPROD',
+                                usernameVariable: 'PBI_APP_ID',
+                                passwordVariable: 'PBI_APP_SECRET'
+                        ),
+                        string(
+                                credentialsId: 'AZ_SPN_KH_PAS_NONPROD_TENANT_ID',
+                                variable: 'PBI_TENANT_ID'
+                        )
                 ]) {
                     pwsh(
-                        label: 'Deploy RDL Reports',
-                        script: """
+                            label: 'Deploy RDL Reports',
+                            script: """
 \$ErrorActionPreference = 'Stop'
 
 # ---------------------------
@@ -469,9 +489,9 @@ Write-Host 'All RDL files processed successfully.'
         always {
             script {
                 emailext(
-                    to: params.Mail_Builder,
-                    subject: "[PowerBI Build] ${env.JOB_NAME} - #${env.BUILD_NUMBER} - ${currentBuild.currentResult}",
-                    body: """\
+                        to: params.Mail_Builder,
+                        subject: "[PowerBI Build] ${env.JOB_NAME} - #${env.BUILD_NUMBER} - ${currentBuild.currentResult}",
+                        body: """\
 <!DOCTYPE html>
 <html>
 <head>
@@ -490,9 +510,9 @@ Write-Host 'All RDL files processed successfully.'
 </body>
 </html>
 """,
-                    mimeType: 'text/html',
-                    attachLog: true,
-                    attachmentsPattern: 'report-id-comparison-summary.csv,report-id-comparison-summary.json'
+                        mimeType: 'text/html',
+                        attachLog: true,
+                        attachmentsPattern: 'report-id-comparison-summary.csv,report-id-comparison-summary.json'
                 )
             }
         }
