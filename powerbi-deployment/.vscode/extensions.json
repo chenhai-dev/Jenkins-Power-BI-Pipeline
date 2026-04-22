@@ -1,0 +1,13 @@
+{
+  "recommendations": [
+    "ms-vscode.powershell",
+    "ms-azuretools.vscode-bicep",
+    "redhat.vscode-yaml",
+    "DavidAnson.vscode-markdownlint",
+    "streetsidesoftware.code-spell-checker",
+    "github.vscode-pull-request-github",
+    "ms-azure-devops.azure-pipelines",
+    "pspester.pester-test",
+    "eamodio.gitlens"
+  ]
+}

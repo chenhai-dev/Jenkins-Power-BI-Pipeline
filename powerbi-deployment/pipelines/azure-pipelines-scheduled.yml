@@ -1,0 +1,111 @@
+# =============================================================================
+# Power BI Scheduled Operations Pipeline
+# =============================================================================
+# Runs nightly backup and every-15-min health check.
+# Separate from deployment pipeline - independently scheduled.
+
+name: PowerBI-Ops-$(Date:yyyyMMdd)-$(Rev:rr)
+
+schedules:
+  - cron: '0 2 * * *'          # Nightly backup at 02:00 UTC
+    displayName: 'Nightly backup'
+    branches:
+      include: [main]
+    always: true
+  - cron: '*/15 * * * *'       # Health check every 15 min
+    displayName: 'Health check'
+    branches:
+      include: [main]
+    always: true
+
+trigger: none                  # Schedule-only, no commit trigger
+
+parameters:
+  - name: mode
+    displayName: 'Operation mode'
+    type: string
+    default: auto
+    values: [auto, backup, healthcheck]
+  - name: environment
+    displayName: 'Environment'
+    type: string
+    default: Prod
+    values: [Dev, Test, Prod]
+
+variables:
+  # Determine mode from schedule if not manually specified
+  - name: operationMode
+    ${{ if eq(parameters.mode, 'auto') }}:
+      ${{ if contains(variables['Build.CronSchedule.DisplayName'], 'backup') }}:
+        value: 'backup'
+      ${{ else }}:
+        value: 'healthcheck'
+    ${{ else }}:
+      value: ${{ parameters.mode }}
+
+stages:
+- stage: Backup
+  displayName: 'Nightly Backup'
+  condition: eq(variables['operationMode'], 'backup')
+  jobs:
+  - job: BackupJob
+    displayName: 'Backup Power BI workspace'
+    pool:
+      vmImage: 'windows-latest'
+    timeoutInMinutes: 120
+    steps:
+      - checkout: self
+        fetchDepth: 1
+
+      - task: AzureCLI@2
+        displayName: 'Run backup script'
+        inputs:
+          azureSubscription: 'sc-powerbi-${{ parameters.environment }}'
+          scriptType: 'pscore'
+          scriptLocation: 'inlineScript'
+          inlineScript: |
+            Install-Module MicrosoftPowerBIMgmt, powershell-yaml, Az.KeyVault, Az.Storage -Force -Scope CurrentUser -AcceptLicense
+
+            ./scripts/backup/Backup-PowerBIWorkspace.ps1 `
+              -Environment ${{ parameters.environment }} `
+              -StorageAccount "stpowerbi$('${{ parameters.environment }}'.ToLower())" `
+              -ContainerName powerbi-backups
+
+- stage: HealthCheck
+  displayName: 'Health Check'
+  condition: eq(variables['operationMode'], 'healthcheck')
+  jobs:
+  - job: HealthJob
+    displayName: 'Check workspace health'
+    pool:
+      vmImage: 'windows-latest'
+    timeoutInMinutes: 15
+    steps:
+      - checkout: self
+        fetchDepth: 1
+
+      - task: AzureCLI@2
+        displayName: 'Run health check'
+        inputs:
+          azureSubscription: 'sc-powerbi-${{ parameters.environment }}'
+          scriptType: 'pscore'
+          scriptLocation: 'inlineScript'
+          inlineScript: |
+            Install-Module MicrosoftPowerBIMgmt, powershell-yaml, Az.KeyVault -Force -Scope CurrentUser -AcceptLicense
+
+            $output = ./scripts/monitoring/Get-PowerBIHealth.ps1 `
+              -Environment ${{ parameters.environment }} `
+              -OutputFormat json
+
+            # Emit to Log Analytics via agent diagnostic extension (native)
+            # Or push to a Log Analytics HTTP Data Collector API:
+            $output | Out-File health-status.json
+
+            # Exit code propagated; pipeline fails if health is unhealthy
+        continueOnError: false
+
+      - task: PublishPipelineArtifact@1
+        condition: always()
+        inputs:
+          targetPath: 'health-status.json'
+          artifactName: 'health-$(Build.BuildId)'

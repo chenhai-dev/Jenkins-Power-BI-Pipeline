@@ -1,0 +1,90 @@
+name: Power BI Scheduled Operations
+
+on:
+  schedule:
+    - cron: '0 2 * * *'        # Nightly backup 02:00 UTC
+    - cron: '*/15 * * * *'     # Health check every 15 min
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Operation'
+        type: choice
+        options: [backup, healthcheck]
+        default: healthcheck
+      environment:
+        description: 'Environment'
+        type: choice
+        options: [Dev, Test, Prod]
+        default: Prod
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  decide:
+    runs-on: ubuntu-latest
+    outputs:
+      mode: ${{ steps.m.outputs.mode }}
+    steps:
+      - id: m
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "mode=${{ inputs.mode }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.schedule }}" == "0 2 * * *" ]]; then
+            echo "mode=backup" >> $GITHUB_OUTPUT
+          else
+            echo "mode=healthcheck" >> $GITHUB_OUTPUT
+          fi
+
+  backup:
+    needs: decide
+    if: needs.decide.outputs.mode == 'backup'
+    runs-on: windows-latest
+    environment: powerbi-prod
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID_PROD }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID_PROD }}
+
+      - shell: pwsh
+        run: |
+          Install-Module MicrosoftPowerBIMgmt, powershell-yaml, Az.KeyVault, Az.Storage -Force -Scope CurrentUser -AcceptLicense
+          ./scripts/backup/Backup-PowerBIWorkspace.ps1 `
+            -Environment Prod `
+            -StorageAccount stpowerbiprod `
+            -ContainerName powerbi-backups
+
+  healthcheck:
+    needs: decide
+    if: needs.decide.outputs.mode == 'healthcheck'
+    runs-on: windows-latest
+    environment: powerbi-prod
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID_PROD }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID_PROD }}
+
+      - shell: pwsh
+        run: |
+          Install-Module MicrosoftPowerBIMgmt, powershell-yaml, Az.KeyVault -Force -Scope CurrentUser -AcceptLicense
+          ./scripts/monitoring/Get-PowerBIHealth.ps1 `
+            -Environment Prod `
+            -OutputFormat json | Tee-Object health.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: health-${{ github.run_id }}
+          path: health.json
+          retention-days: 7

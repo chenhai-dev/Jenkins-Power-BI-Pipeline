@@ -1,0 +1,46 @@
+# Power BI Deployment Configuration - DEVELOPMENT
+environment: Dev
+
+auth:
+  tenantId: "00000000-0000-0000-0000-000000000000"
+  clientId: "33333333-3333-3333-3333-333333333333"
+  clientSecretName: "sp-powerbi-deploy-dev-secret"
+
+keyVault:
+  name: "kv-powerbi-dev"
+  resourceGroup: "rg-analytics-dev"
+
+workspace:
+  name: "Enterprise-Analytics-DEV"
+  capacityId: "44444444-4444-4444-4444-444444444444"    # Shared Premium capacity for non-prod
+  createIfMissing: true                                 # Dev can auto-create
+
+dataSource:
+  credentialType: "Basic"
+  usernameSecretName: "sql-reporting-user-dev"
+  passwordSecretName: "sql-reporting-password-dev"
+  encryptedConnection: "Encrypted"
+  privacyLevel: "Organizational"
+
+reports:
+  - fileName: "SalesDashboard.pbix"
+    displayName: "Sales Dashboard [DEV]"
+    parameters:
+      SqlServerName: "sql-dev.database.windows.net"
+      DatabaseName: "SalesDW_Dev"
+      Environment: "Development"
+
+  - fileName: "FinancePaginated.rdl"
+    displayName: "Finance Monthly Report [DEV]"
+
+  - fileName: "ExecutiveKPIs.pbix"
+    displayName: "Executive KPIs [DEV]"
+    parameters:
+      SqlServerName: "sql-dev.database.windows.net"
+      DatabaseName: "EnterpriseKPI_Dev"
+
+refresh:
+  enabled: false   # Manual refresh in dev
+
+approval:
+  required: false

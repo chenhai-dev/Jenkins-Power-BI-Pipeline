@@ -1,0 +1,67 @@
+# =============================================================================
+# .gitignore
+# =============================================================================
+
+# Secrets & local config
+*.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+*.pfx
+.azure/
+
+# Pipeline / deploy outputs
+deployment-summary.json
+validation-results.json
+health-status.json
+health.json
+*.log
+
+# Temp backup extraction
+dr-restore/
+pbi-backup-*/
+
+# Local PowerShell module cache
+.vscode/PSScriptAnalyzerSettings.psd1.user
+TestResults*.xml
+test-results.xml
+coverage.xml
+
+# IDE
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Power BI Desktop artifacts
+*.pbix.bak
+*.pbip.bak
+~$*.pbix
+
+# Bicep build outputs
+*.bicep.json
+
+# Archives (usually accidental)
+*.zip
+*.tar.gz
+!tests/fixtures/*.zip           # Allow pre-committed test fixtures
+
+# Sensitive report outputs — never commit rendered reports
+exports/
+*.pdf
+*.xlsx
+!docs/**/*.pdf                  # Except diagrams/docs
+
+# Python venv (if anyone uses Python tooling locally)
+venv/
+.venv/
+__pycache__/

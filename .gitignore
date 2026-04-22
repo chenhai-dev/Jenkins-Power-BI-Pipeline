@@ -1,0 +1,31 @@
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Groovy/Java
+*.class
+*.log
+*.jar
+*.war
+*.ear
+build/
+target/
+dist/
+lib
+*.swp
+*.swo
+
+# Photo
+photo
+
+# OS
+.DS_Store
+Thumbs.db
+*.bak
+*~
+
+# Temporary files
+*.tmp

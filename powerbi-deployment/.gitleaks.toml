@@ -1,0 +1,55 @@
+# =============================================================================
+# Gitleaks configuration
+# =============================================================================
+# Custom rules tailored for Power BI / enterprise context
+# Run: gitleaks detect --config .gitleaks.toml --verbose
+
+title = "Power BI Deployment Gitleaks Config"
+
+[extend]
+# Inherit gitleaks' default ruleset
+useDefault = true
+
+# ---- Custom rules -----------------------------------------------------------
+[[rules]]
+id = "powerbi-embedded-password"
+description = "Embedded password in Power BI connection string"
+regex = '''(?i)(password|pwd)\s*=\s*['"][^'";\s]{4,}['"]'''
+tags = ["powerbi", "credential"]
+
+[[rules]]
+id = "azure-sql-connection-string"
+description = "Azure SQL connection string with embedded credentials"
+regex = '''Server=tcp:[a-zA-Z0-9\-]+\.database\.windows\.net,1433;.*(Password|pwd)=[^;'"]+'''
+tags = ["azure", "sql"]
+
+[[rules]]
+id = "powerbi-api-token-in-code"
+description = "Power BI access token hardcoded"
+regex = '''(?i)(powerbi|pbi)[_-]?(access)?[_-]?token\s*[:=]\s*['"][A-Za-z0-9\-_\.]{30,}['"]'''
+tags = ["powerbi"]
+
+[[rules]]
+id = "service-principal-secret-literal"
+description = "Service principal secret assigned literally (not from vault)"
+regex = '''(?i)clientSecret\s*=\s*['"][A-Za-z0-9~\-_\.]{30,}['"]'''
+tags = ["azure", "credential"]
+
+# ---- Allowlists -------------------------------------------------------------
+[allowlist]
+description = "Global allowlist"
+paths = [
+    '''\.secrets\.baseline''',
+    '''tests/fixtures/.*''',        # Sample data, pre-reviewed
+]
+
+regexes = [
+    # Placeholder GUIDs in config templates — zeros are obvious placeholders
+    '''00000000-0000-0000-0000-000000000000''',
+    # Documentation placeholders
+    '''<replace-with-.*>''',
+    # Example values in docs
+    '''example\.com''',
+]
+
+commits = []

@@ -1,0 +1,82 @@
+# =============================================================================
+# Pre-commit Hooks
+# =============================================================================
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  # ---- Generic hygiene -------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-yaml
+        exclude: ^pipelines/
+      - id: check-json
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-added-large-files
+        args: ['--maxkb=51200']
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+
+  # ---- Secret scanning -------------------------------------------------------
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args:
+          - --baseline
+          - .secrets.baseline
+        exclude: |
+          (?x)^(
+              .*\.pbix|
+              .*\.rdl|
+              .*\.png|
+              .*\.jpg
+          )$
+
+  # ---- PowerShell linting ----------------------------------------------------
+  - repo: local
+    hooks:
+      - id: psscriptanalyzer
+        name: PSScriptAnalyzer
+        entry: pwsh -File ./scripts/hooks/run-psscriptanalyzer.ps1
+        language: system
+        types: [file]
+        files: \.(ps1|psm1|psd1)$
+        pass_filenames: false
+
+  # ---- Bicep validation ------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: bicep-build
+        name: bicep build (lint)
+        entry: bash ./scripts/hooks/bicep-lint.sh
+        language: system
+        files: \.bicep$
+        pass_filenames: false
+
+  # ---- Report artifact size guard -------------------------------------------
+  - repo: local
+    hooks:
+      - id: no-huge-pbix
+        name: Block .pbix > 500MB
+        entry: bash ./scripts/hooks/size-guard.sh
+        language: system
+        pass_filenames: false
+
+  # ---- Pre-deployment validation --------------------------------------------
+  - repo: local
+    hooks:
+      - id: pre-deploy-validation
+        name: Pre-deployment validation
+        entry: pwsh -File ./scripts/Invoke-PreDeploymentValidation.ps1 -ArtifactPath ./reports -Environment Dev -ConfigPath ./config/prod.yaml
+        language: system
+        files: ^(reports/.*\.(pbix|rdl)|config/.*\.yaml)$
+        pass_filenames: false

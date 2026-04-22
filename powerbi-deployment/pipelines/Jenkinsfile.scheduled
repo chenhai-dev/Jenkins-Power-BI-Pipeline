@@ -1,0 +1,173 @@
+// =============================================================================
+// Power BI Scheduled Operations - Jenkins Pipeline
+// =============================================================================
+// Runs nightly backup (02:00) and every-15-min health check.
+// Configure as a SEPARATE Jenkins job from the deployment pipeline.
+//
+// Job name suggestion: powerbi-scheduled-ops
+// =============================================================================
+
+pipeline {
+    agent {
+        label 'powershell && windows'
+    }
+
+    options {
+        timestamps()
+        timeout(time: 2, unit: 'HOURS')
+        buildDiscarder(logRotator(
+            numToKeepStr: '100',     // Health checks run often; keep a bunch
+            daysToKeepStr: '30'
+        ))
+    }
+
+    // NOTE: Jenkins cron uses hash syntax (H) to distribute load.
+    // '0 2 * * *'   = exactly 02:00 UTC
+    // 'H 2 * * *'   = some minute in hour 2 (jitter for load spreading)
+    triggers {
+        parameterizedCron('''
+            H 2 * * *     %MODE=backup;ENVIRONMENT=Prod
+            H/15 * * * *  %MODE=healthcheck;ENVIRONMENT=Prod
+        ''')
+    }
+
+    parameters {
+        choice(
+            name: 'MODE',
+            choices: ['healthcheck', 'backup'],
+            description: 'Operation to perform'
+        )
+        choice(
+            name: 'ENVIRONMENT',
+            choices: ['Prod', 'Test', 'Dev'],
+            description: 'Target environment'
+        )
+        string(
+            name: 'STORAGE_ACCOUNT',
+            defaultValue: 'stpowerbiprod',
+            description: 'Azure storage account for backups (mode=backup only)'
+        )
+    }
+
+    environment {
+        PBI_TENANT_ID = credentials('pbi-sp-tenant-id')
+    }
+
+    stages {
+        stage('Setup') {
+            steps {
+                checkout scm
+                pwsh '''
+                    Install-Module MicrosoftPowerBIMgmt, powershell-yaml, `
+                                   Az.KeyVault, Az.Storage, Az.Accounts `
+                        -Force -Scope CurrentUser -AcceptLicense -AllowClobber `
+                        -ErrorAction SilentlyContinue
+                '''
+            }
+        }
+
+        stage('Backup') {
+            when {
+                expression { params.MODE == 'backup' }
+            }
+            environment {
+                PBI_CLIENT_ID     = credentials("pbi-sp-${params.ENVIRONMENT.toLowerCase()}-client-id")
+                PBI_CLIENT_SECRET = credentials("pbi-sp-${params.ENVIRONMENT.toLowerCase()}-client-secret")
+            }
+            options {
+                timeout(time: 2, unit: 'HOURS')
+            }
+            steps {
+                pwsh """
+                    \$cred = New-Object PSCredential(
+                        '${env.PBI_CLIENT_ID}',
+                        (ConvertTo-SecureString '${env.PBI_CLIENT_SECRET}' -AsPlainText -Force)
+                    )
+                    Connect-AzAccount -ServicePrincipal -Credential \$cred -TenantId '${env.PBI_TENANT_ID}' | Out-Null
+
+                    ./scripts/backup/Backup-PowerBIWorkspace.ps1 `
+                        -Environment ${params.ENVIRONMENT} `
+                        -StorageAccount ${params.STORAGE_ACCOUNT} `
+                        -ContainerName powerbi-backups
+                """
+            }
+            post {
+                failure {
+                    emailext(
+                        subject: "Power BI backup FAILED - ${params.ENVIRONMENT}",
+                        body: "Build: ${env.BUILD_URL}",
+                        to: 'dataplatform-oncall@example.com'
+                    )
+                }
+            }
+        }
+
+        stage('Health check') {
+            when {
+                expression { params.MODE == 'healthcheck' }
+            }
+            environment {
+                PBI_CLIENT_ID     = credentials("pbi-sp-${params.ENVIRONMENT.toLowerCase()}-client-id")
+                PBI_CLIENT_SECRET = credentials("pbi-sp-${params.ENVIRONMENT.toLowerCase()}-client-secret")
+            }
+            options {
+                timeout(time: 15, unit: 'MINUTES')
+            }
+            steps {
+                script {
+                    def exitCode = pwsh(
+                        returnStatus: true,
+                        script: """
+                            \$cred = New-Object PSCredential(
+                                '${env.PBI_CLIENT_ID}',
+                                (ConvertTo-SecureString '${env.PBI_CLIENT_SECRET}' -AsPlainText -Force)
+                            )
+                            Connect-AzAccount -ServicePrincipal -Credential \$cred `
+                                -TenantId '${env.PBI_TENANT_ID}' | Out-Null
+
+                            ./scripts/monitoring/Get-PowerBIHealth.ps1 `
+                                -Environment ${params.ENVIRONMENT} `
+                                -OutputFormat json | Tee-Object health.json
+                        """
+                    )
+
+                    // Exit codes: 0=healthy, 1=degraded, 2=unhealthy
+                    if (exitCode == 2) {
+                        currentBuild.result = 'FAILURE'
+                        error('Power BI health is UNHEALTHY')
+                    } else if (exitCode == 1) {
+                        currentBuild.result = 'UNSTABLE'
+                    }
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts(
+                        artifacts: 'health.json',
+                        allowEmptyArchive: true
+                    )
+                }
+                unsuccessful {
+                    // Only alert on consecutive failures to avoid noise
+                    script {
+                        def prev = currentBuild.previousBuild
+                        if (prev && prev.result in ['FAILURE', 'UNSTABLE']) {
+                            slackSend(
+                                channel: '#data-platform-oncall',
+                                color: 'danger',
+                                message: "⚠ Power BI ${params.ENVIRONMENT} health degraded (2+ consecutive). ${env.BUILD_URL}",
+                                tokenCredentialId: 'slack-notifier-token'
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}
