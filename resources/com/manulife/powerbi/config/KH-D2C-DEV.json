@@ -1,0 +1,10 @@
+{
+  "environment": "DEV",
+  "appName": "KH-D2C",
+  "workspaceName": "KH-D2C-DEV",
+  "workspaceId": "REPLACE-WITH-DEV-WORKSPACE-GUID",
+  "description": "KH-D2C development workspace",
+  "datasetsToRefresh": [],
+  "datasetMappings": [],
+  "datasourceParameters": []
+}

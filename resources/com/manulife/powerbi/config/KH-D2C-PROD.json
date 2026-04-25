@@ -1,0 +1,10 @@
+{
+  "environment": "PROD",
+  "appName": "KH-D2C",
+  "workspaceName": "KH-D2C-PROD",
+  "workspaceId": "REPLACE-WITH-PROD-WORKSPACE-GUID",
+  "description": "KH-D2C production workspace",
+  "datasetsToRefresh": [],
+  "datasetMappings": [],
+  "datasourceParameters": []
+}

@@ -1,0 +1,38 @@
+// =============================================================================
+// Example Jenkinsfile for a consuming app team (e.g. KH-D2C).
+//
+// This is what lives in the APP'S repo (the one that contains the .rdl / .pbix
+// reports). Drop it at the repo root and create a Jenkins pipeline pointing at
+// it. The shared library does the heavy lifting.
+// =============================================================================
+
+@Library('eng-jenkins-pipeline-lib@feature/powerbi-pipeline') _
+
+properties([
+    parameters([
+        choice(
+            name: 'TARGET_ENV',
+            choices: ['DEV', 'TEST', 'UAT', 'PROD'],
+            description: 'Target Power BI workspace environment'
+        ),
+        booleanParam(
+            name: 'REFRESH_DATASET',
+            defaultValue: false,
+            description: 'Trigger dataset refresh after deploy'
+        ),
+        booleanParam(
+            name: 'DRY_RUN',
+            defaultValue: false,
+            description: 'Validate only, do not publish'
+        )
+    ])
+])
+
+pipelineJavaPowerBI_KH(
+    targetEnv:       params.TARGET_ENV,
+    appName:         'KH-D2C',
+    reportFolder:    'reports',
+    refreshDataset:  params.REFRESH_DATASET,
+    dryRun:          params.DRY_RUN,
+    notifyOnFailure: 'kh-d2c-team@manulife.com'
+)

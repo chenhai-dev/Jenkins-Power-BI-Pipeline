@@ -1,0 +1,10 @@
+{
+  "environment": "UAT",
+  "appName": "KH-D2C",
+  "workspaceName": "KH-D2C-UAT",
+  "workspaceId": "REPLACE-WITH-UAT-WORKSPACE-GUID",
+  "description": "KH-D2C user acceptance workspace",
+  "datasetsToRefresh": [],
+  "datasetMappings": [],
+  "datasourceParameters": []
+}

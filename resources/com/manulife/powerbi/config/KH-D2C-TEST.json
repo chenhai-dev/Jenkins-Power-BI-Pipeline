@@ -1,0 +1,10 @@
+{
+  "environment": "TEST",
+  "appName": "KH-D2C",
+  "workspaceName": "KH-D2C-TEST",
+  "workspaceId": "REPLACE-WITH-TEST-WORKSPACE-GUID",
+  "description": "KH-D2C integration test workspace",
+  "datasetsToRefresh": [],
+  "datasetMappings": [],
+  "datasourceParameters": []
+}
